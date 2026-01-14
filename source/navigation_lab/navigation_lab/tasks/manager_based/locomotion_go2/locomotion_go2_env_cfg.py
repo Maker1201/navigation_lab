@@ -748,156 +748,258 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):  # 运动速度跟踪
 
 
 
+# 使用 configclass 装饰器标记配置类，使其支持配置文件的序列化和反序列化
 @configclass
+# 定义Unitree Go2机器人在粗糙地形上的运动环境配置类，继承自LocomotionVelocityRoughEnvCfg
 class UnitreeGo2RoughEnvCfg(LocomotionVelocityRoughEnvCfg):
+    # 机器人基座（base）链接的名称
     base_link_name = "base"
+    # 足部链接名称的正则表达式模式，匹配所有以"_foot"结尾的链接
     foot_link_name = ".*_foot"
     # fmt: off
+    # 关闭代码格式化，保持关节名称列表的原始格式
+    # 定义所有关节的名称列表，包括四条腿的髋关节、大腿关节和小腿关节
+    # FR: 右前腿, FL: 左前腿, RR: 右后腿, RL: 左后腿
     joint_names = [
-        "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
-        "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
-        "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
-        "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",
+        "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",  # 右前腿的三个关节
+        "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",  # 左前腿的三个关节
+        "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",  # 右后腿的三个关节
+        "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",  # 左后腿的三个关节
     ]
     # fmt: on
+    # 重新开启代码格式化
 
+    # 后初始化方法，在对象创建后调用，用于配置环境的各个组件
     def __post_init__(self):
-        # post init of parent
+        # 调用父类的后初始化方法，确保父类的配置也被正确设置
         super().__post_init__()
 
         # ------------------------------Scene------------------------------
-        # Reduce number of environments for smaller GPUs (7-8 GiB)
-        # Original: 4096 environments, reduced to 1024 for GPU memory constraints
+        # 场景配置部分
+        # 减少环境数量以适应较小的GPU（7-8 GiB显存）
+        # 原始值：4096个环境，为GPU内存限制减少到1024
+        # 设置并行仿真的环境数量
         self.scene.num_envs = 1024
+        # 设置机器人配置，使用Unitree Go2的配置并替换原始路径为环境命名空间中的路径
         self.scene.robot = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        # 设置高度扫描器的路径，用于检测机器人基座下方的地形高度
         self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
+        # 设置基座高度扫描器的路径，用于检测基座相对于地面的高度
         self.scene.height_scanner_base.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
 
         # ------------------------------Observations------------------------------
+        # 观察值配置部分
+        # 设置基座线性速度的缩放因子，用于归一化观察值
         self.observations.policy.base_lin_vel.scale = 2.0
+        # 设置基座角速度的缩放因子，用于归一化观察值
         self.observations.policy.base_ang_vel.scale = 0.25
+        # 设置关节位置的缩放因子，用于归一化观察值
         self.observations.policy.joint_pos.scale = 1.0
+        # 设置关节速度的缩放因子，用于归一化观察值
         self.observations.policy.joint_vel.scale = 0.05
-        self.observations.policy.base_lin_vel = None
+        # 注释掉的代码：禁用基座线性速度观察（当前未使用）
+        # self.observations.policy.base_lin_vel = None
+        # 禁用高度扫描观察，不在策略观察中包含地形高度信息
         self.observations.policy.height_scan = None
+        # 设置关节位置观察的关节名称列表
         self.observations.policy.joint_pos.params["asset_cfg"].joint_names = self.joint_names
+        # 设置关节速度观察的关节名称列表
         self.observations.policy.joint_vel.params["asset_cfg"].joint_names = self.joint_names
 
         # ------------------------------Actions------------------------------
-        # reduce action scale
+        # 动作配置部分
+        # 减少动作缩放，使动作幅度更小，提高控制精度
+        # 设置关节位置动作的缩放因子，髋关节使用0.125，其他关节使用0.25
         self.actions.joint_pos.scale = {".*_hip_joint": 0.125, "^(?!.*_hip_joint).*": 0.25}
+        # 设置关节位置动作的裁剪范围，限制动作值在-100.0到100.0之间
         self.actions.joint_pos.clip = {".*": (-100.0, 100.0)}
+        # 设置动作控制的关节名称列表
         self.actions.joint_pos.joint_names = self.joint_names
 
         # ------------------------------Events------------------------------
+        # 事件配置部分（域随机化）
+        # 配置重置时基座的随机化参数
         self.events.randomize_reset_base.params = {
+            # 姿态随机化范围（位置和旋转）
             "pose_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (0.0, 0.2),
-                "roll": (-3.14, 3.14),
-                "pitch": (-3.14, 3.14),
-                "yaw": (-3.14, 3.14),
+                "x": (-0.5, 0.5),      # X轴位置范围（米）
+                "y": (-0.5, 0.5),      # Y轴位置范围（米）
+                "z": (0.0, 0.2),       # Z轴位置范围（米），高度范围
+                "roll": (-3.14, 3.14),  # 横滚角范围（弧度），约±180度
+                "pitch": (-3.14, 3.14), # 俯仰角范围（弧度），约±180度
+                "yaw": (-3.14, 3.14),   # 偏航角范围（弧度），约±180度
             },
+            # 速度随机化范围
             "velocity_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (-0.5, 0.5),
-                "roll": (-0.5, 0.5),
-                "pitch": (-0.5, 0.5),
-                "yaw": (-0.5, 0.5),
+                "x": (-0.5, 0.5),      # X轴线性速度范围（米/秒）
+                "y": (-0.5, 0.5),      # Y轴线性速度范围（米/秒）
+                "z": (-0.5, 0.5),      # Z轴线性速度范围（米/秒）
+                "roll": (-0.5, 0.5),    # 横滚角速度范围（弧度/秒）
+                "pitch": (-0.5, 0.5),  # 俯仰角速度范围（弧度/秒）
+                "yaw": (-0.5, 0.5),    # 偏航角速度范围（弧度/秒）
             },
         }
+        # 配置基座刚体质量的随机化，只对基座进行质量随机化
         self.events.randomize_rigid_body_mass_base.params["asset_cfg"].body_names = [self.base_link_name]
+        # 配置其他刚体质量的随机化，对所有非基座部分进行质量随机化
         self.events.randomize_rigid_body_mass_others.params["asset_cfg"].body_names = [
-            f"^(?!.*{self.base_link_name}).*"
+            f"^(?!.*{self.base_link_name}).*"  # 正则表达式：匹配所有不包含base_link_name的刚体
         ]
+        # 配置质心位置的随机化，只对基座进行质心位置随机化
         self.events.randomize_com_positions.params["asset_cfg"].body_names = [self.base_link_name]
+        # 配置外部力和力矩的随机化，只对基座施加随机的外部力和力矩
         self.events.randomize_apply_external_force_torque.params["asset_cfg"].body_names = [self.base_link_name]
 
         # ------------------------------Rewards------------------------------
-        # General
+        # 奖励配置部分
+        # 通用奖励项
+        # 终止状态的奖励权重，设为0表示不给予终止奖励
         self.rewards.is_terminated.weight = 0
 
-        # Root penalties
+        # 基座惩罚项
+        # Z轴线性速度的L2范数惩罚权重，惩罚垂直方向的运动
         self.rewards.lin_vel_z_l2.weight = -2.0
+        # XY平面角速度的L2范数惩罚权重，惩罚翻滚和俯仰运动
         self.rewards.ang_vel_xy_l2.weight = -0.05
+        # 平坦姿态的L2范数惩罚权重，设为0表示不惩罚
         self.rewards.flat_orientation_l2.weight = 0
+        # 基座高度的L2范数惩罚权重，设为0表示不惩罚
         self.rewards.base_height_l2.weight = 0
+        # 基座高度的目标值（米）
         self.rewards.base_height_l2.params["target_height"] = 0.33
+        # 基座高度奖励适用的刚体名称列表
         self.rewards.base_height_l2.params["asset_cfg"].body_names = [self.base_link_name]
+        # 基座线性加速度的L2范数惩罚权重，设为0表示不惩罚
         self.rewards.body_lin_acc_l2.weight = 0
+        # 基座线性加速度奖励适用的刚体名称列表
         self.rewards.body_lin_acc_l2.params["asset_cfg"].body_names = [self.base_link_name]
 
-        # Joint penalties
+        # 关节惩罚项
+        # 关节力矩的L2范数惩罚权重，惩罚过大的关节力矩
         self.rewards.joint_torques_l2.weight = -2.5e-5
+        # 关节速度的L2范数惩罚权重，设为0表示不惩罚
         self.rewards.joint_vel_l2.weight = 0
+        # 关节加速度的L2范数惩罚权重，惩罚过大的关节加速度
         self.rewards.joint_acc_l2.weight = -2.5e-7
+        # 注释掉的代码：创建髋关节偏差的L1奖励项（当前未使用）
         # self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -0.2, [".*_hip_joint"])
+        # 关节位置限制的惩罚权重，惩罚超出关节位置限制的行为
         self.rewards.joint_pos_limits.weight = -5.0
+        # 关节速度限制的惩罚权重，设为0表示不惩罚
         self.rewards.joint_vel_limits.weight = 0
+        # 关节功率的惩罚权重，惩罚过大的关节功率消耗
         self.rewards.joint_power.weight = -2e-5
+        # 静止状态的惩罚权重，惩罚机器人保持静止不动
         self.rewards.stand_still.weight = -2.0
+        # 关节位置惩罚权重，惩罚偏离默认位置的关节
         self.rewards.joint_pos_penalty.weight = -1.0
+        # 关节镜像对称的惩罚权重，鼓励左右对称的运动
         self.rewards.joint_mirror.weight = -0.05
+        # 定义镜像关节对，用于计算对称性奖励
+        # 第一对：右前腿和左后腿镜像
+        # 第二对：左前腿和右后腿镜像
         self.rewards.joint_mirror.params["mirror_joints"] = [
-            ["FR_(hip|thigh|calf).*", "RL_(hip|thigh|calf).*"],
-            ["FL_(hip|thigh|calf).*", "RR_(hip|thigh|calf).*"],
+            ["FR_(hip|thigh|calf).*", "RL_(hip|thigh|calf).*"],  # 右前-左后镜像
+            ["FL_(hip|thigh|calf).*", "RR_(hip|thigh|calf).*"],  # 左前-右后镜像
         ]
 
-        # Action penalties
+        # 动作惩罚项
+        # 动作变化率的L2范数惩罚权重，惩罚动作变化过快，鼓励平滑控制
         self.rewards.action_rate_l2.weight = -0.01
 
-        # Contact sensor
+        # 接触传感器相关奖励
+        # 不期望接触的惩罚权重，惩罚非足部的接触（如基座或腿部接触地面）
         self.rewards.undesired_contacts.weight = -1.0
+        # 不期望接触检测的刚体名称，匹配所有非足部的刚体
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
+        # 接触力的惩罚权重，惩罚过大的足部接触力
         self.rewards.contact_forces.weight = -1.5e-4
+        # 接触力检测的刚体名称，只检测足部
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
 
-        # Velocity-tracking rewards
+        # 速度跟踪奖励
+        # XY平面线性速度跟踪的指数奖励权重，鼓励跟踪期望的线性速度
         self.rewards.track_lin_vel_xy_exp.weight = 3.0
+        # Z轴角速度跟踪的指数奖励权重，鼓励跟踪期望的角速度
         self.rewards.track_ang_vel_z_exp.weight = 1.5
 
-        # Others
+        # 其他奖励项
+        # 足部空中时间的奖励权重，鼓励适当的步态周期
         self.rewards.feet_air_time.weight = 0.1
+        # 足部空中时间的阈值（秒），超过此值才给予奖励
         self.rewards.feet_air_time.params["threshold"] = 0.5
+        # 足部空中时间检测的刚体名称
         self.rewards.feet_air_time.params["sensor_cfg"].body_names = [self.foot_link_name]
+        # 足部空中时间方差的惩罚权重，惩罚步态不一致
         self.rewards.feet_air_time_variance.weight = -1.0
+        # 足部空中时间方差检测的刚体名称
         self.rewards.feet_air_time_variance.params["sensor_cfg"].body_names = [self.foot_link_name]
+        # 足部接触的奖励权重，设为0表示不奖励
         self.rewards.feet_contact.weight = 0
+        # 足部接触检测的刚体名称
         self.rewards.feet_contact.params["sensor_cfg"].body_names = [self.foot_link_name]
+        # 无命令时足部接触的奖励权重，鼓励在没有命令时保持接触
         self.rewards.feet_contact_without_cmd.weight = 0.1
+        # 无命令时足部接触检测的刚体名称
         self.rewards.feet_contact_without_cmd.params["sensor_cfg"].body_names = [self.foot_link_name]
+        # 足部绊倒的奖励权重，设为0表示不惩罚
         self.rewards.feet_stumble.weight = 0
+        # 足部绊倒检测的刚体名称
         self.rewards.feet_stumble.params["sensor_cfg"].body_names = [self.foot_link_name]
+        # 足部滑动的惩罚权重，惩罚足部在地面上滑动
         self.rewards.feet_slide.weight = -0.1
+        # 足部滑动检测的传感器刚体名称
         self.rewards.feet_slide.params["sensor_cfg"].body_names = [self.foot_link_name]
+        # 足部滑动检测的资产刚体名称
         self.rewards.feet_slide.params["asset_cfg"].body_names = [self.foot_link_name]
+        # 足部高度的奖励权重，设为0表示不奖励
         self.rewards.feet_height.weight = 0
+        # 足部高度的目标值（米）
         self.rewards.feet_height.params["target_height"] = 0.05
+        # 足部高度检测的刚体名称
         self.rewards.feet_height.params["asset_cfg"].body_names = [self.foot_link_name]
+        # 足部相对于基座高度的惩罚权重，惩罚足部过低
         self.rewards.feet_height_body.weight = -5.0
+        # 足部相对于基座高度的目标值（米），负值表示在基座下方
         self.rewards.feet_height_body.params["target_height"] = -0.2
+        # 足部相对于基座高度检测的刚体名称
         self.rewards.feet_height_body.params["asset_cfg"].body_names = [self.foot_link_name]
+        # 足部步态的奖励权重，鼓励正确的步态模式
         self.rewards.feet_gait.weight = 0.5
+        # 定义同步的足部对名称，用于步态奖励计算
+        # 第一对：左前足和右后足同步
+        # 第二对：右前足和左后足同步（对角步态）
         self.rewards.feet_gait.params["synced_feet_pair_names"] = (("FL_foot", "RR_foot"), ("FR_foot", "RL_foot"))
+        # 向上的奖励权重，鼓励机器人保持向上姿态
         self.rewards.upward.weight = 1.0
 
-        # If the weight of rewards is 0, set rewards to None
+        # 如果奖励权重为0，将奖励设置为None以优化性能
+        # 检查当前类名是否为UnitreeGo2RoughEnvCfg
         if self.__class__.__name__ == "UnitreeGo2RoughEnvCfg":
+            # 禁用所有权重为0的奖励项，提高仿真效率
             self.disable_zero_weight_rewards()
 
         # ------------------------------Terminations------------------------------
+        # 终止条件配置部分
+        # 注释掉的代码：设置非法接触的终止条件（当前未使用）
         # self.terminations.illegal_contact.params["sensor_cfg"].body_names = [self.base_link_name, ".*_hip"]
+        # 禁用非法接触终止条件，不因非法接触而终止episode
         self.terminations.illegal_contact = None
 
         # ------------------------------Curriculums------------------------------
+        # 课程学习配置部分
+        # 注释掉的代码：设置线性速度命令的课程学习范围倍数（当前未使用）
         # self.curriculum.command_levels_lin_vel.params["range_multiplier"] = (0.2, 1.0)
+        # 注释掉的代码：设置角速度命令的课程学习范围倍数（当前未使用）
         # self.curriculum.command_levels_ang_vel.params["range_multiplier"] = (0.2, 1.0)
+        # 禁用线性速度命令的课程学习
         self.curriculum.command_levels_lin_vel = None
+        # 禁用角速度命令的课程学习
         self.curriculum.command_levels_ang_vel = None
 
         # ------------------------------Commands------------------------------
-        # self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 1.0)
-        # self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
-        # self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)
+        # 命令配置部分
+        # 注释掉的代码：设置基座速度命令的范围（当前未使用，使用默认值）
+        # self.commands.base_velocity.ranges.lin_vel_x = (-1.0, 1.0)  # X轴线性速度范围（米/秒）
+        # self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)  # Y轴线性速度范围（米/秒）
+        # self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)  # Z轴角速度范围（弧度/秒）
