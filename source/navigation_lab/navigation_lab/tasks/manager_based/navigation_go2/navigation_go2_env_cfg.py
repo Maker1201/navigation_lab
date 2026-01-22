@@ -11,9 +11,9 @@ from isaaclab.utils import configclass  # 导入配置类装饰器，用于创�
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR  # 导入Isaac Lab资源目录路径常量
 
 import navigation_lab.tasks.manager_based.navigation_go2.mdp as mdp  # 导入导航任务的MDP（马尔可夫决策过程）模块
-from navigation_lab.tasks.manager_based.locomotion_go2.locomotion_go2Exteroception_env_cfg import UnitreeGo2ExteroceptionRoughEnvCfg  # 导入Unitree Go2机器人的底层运动环境配置
+from navigation_lab.tasks.manager_based.locomotion_go2.locomotion_go2_env_cfg import UnitreeGo2RoughEnvCfg  # 导入Unitree Go2机器人的底层运动环境配置
 
-LOW_LEVEL_ENV_CFG = UnitreeGo2ExteroceptionRoughEnvCfg()  # 创建底层环境配置实例，用于获取底层环境的配置参数
+LOW_LEVEL_ENV_CFG = UnitreeGo2RoughEnvCfg()  # 创建底层环境配置实例，用于获取底层环境的配置参数
 
 
 @configclass  # 配置类装饰器，将此类标记为配置类
@@ -45,7 +45,7 @@ class ActionsCfg:
 
     pre_trained_policy_action: mdp.PreTrainedPolicyActionCfg = mdp.PreTrainedPolicyActionCfg(  # 预训练策略动作配置
         asset_name="robot",  # 资产名称：机器人
-        policy_path=f"logs/rsl_rl/unitree_go2_rough/2026-01-14_15-51-37/exported/policy.pt",  # 预训练策略模型文件路径
+        policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt",  # 预训练策略模型文件路径
         low_level_decimation=4,  # 底层策略的降采样倍数（每4个高层步执行一次底层策略）
         low_level_actions=LOW_LEVEL_ENV_CFG.actions.joint_pos,  # 底层动作配置：使用底层环境的关节位置控制
         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy,  # 底层观测配置：使用底层环境的策略观测
@@ -78,20 +78,20 @@ class RewardsCfg:
     """Reward terms for the MDP."""
     """奖励配置类：定义MDP中的奖励项"""
 
-    termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)  # 终止惩罚奖励项：当环境终止时给予-400.0的惩罚
+    termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)  # 终止惩罚奖励项：当环境终止时给予-400.0的惩罚
     position_tracking = RewTerm(  # 位置跟踪奖励项
         func=mdp.position_command_error_tanh,  # 使用双曲正切函数计算位置命令误差
-        weight=0.6,  # 奖励权重为0.5
+        weight=0.5,  # 奖励权重为0.5
         params={"std": 2.0, "command_name": "pose_command"},  # 参数：标准差2.0米，命令名称为pose_command
     )
     position_tracking_fine_grained = RewTerm(  # 精细位置跟踪奖励项
         func=mdp.position_command_error_tanh,  # 使用双曲正切函数计算位置命令误差
-        weight=0.7,  # 奖励权重为0.5
+        weight=0.5,  # 奖励权重为0.5
         params={"std": 0.2, "command_name": "pose_command"},  # 参数：标准差0.2米（更精细），命令名称为pose_command
     )
     orientation_tracking = RewTerm(  # 方向跟踪奖励项
         func=mdp.heading_command_error_abs,  # 使用绝对航向命令误差函数
-        weight=-0.3,  # 奖励权重为-0.2（负值表示惩罚）
+        weight=-0.2,  # 奖励权重为-0.2（负值表示惩罚）
         params={"command_name": "pose_command"},  # 参数：命令名称为pose_command
     )
 
@@ -112,12 +112,13 @@ class CommandsCfg:
 
 @configclass  # 配置类装饰器
 class TerminationsCfg:
-    """Termination terms for the MDP.终止配置类：定义MDP中的终止条件"""
+    """Termination terms for the MDP."""
+    """终止配置类：定义MDP中的终止条件"""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)  # 超时终止项：当达到最大时间步时终止，time_out标志为True
     base_contact = DoneTerm(  # 基座接触终止项：当基座发生非法接触时终止
         func=mdp.illegal_contact,  # 使用非法接触检测函数
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 2.0},  # 参数：接触力传感器配置（检测base身体），阈值1.0
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},  # 参数：接触力传感器配置（检测base身体），阈值1.0
     )
 
 

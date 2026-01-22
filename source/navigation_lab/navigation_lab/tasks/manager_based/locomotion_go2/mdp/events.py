@@ -9,7 +9,6 @@ from isaaclab.assets import Articulation, RigidObject  # 导入关节系统和�
 from isaaclab.managers import SceneEntityCfg  # 导入场景实体配置类
 
 from .utils import is_env_assigned_to_terrain  # 从utils模块导入判断环境是否分配给特定地形的函数
-
 if TYPE_CHECKING:  # 仅在类型检查时执行（运行时不会执行）
     from isaaclab.envs import ManagerBasedEnv  # 导入基于管理器的环境类（仅用于类型注解）
 
