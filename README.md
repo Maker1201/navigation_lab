@@ -5,6 +5,7 @@
 git pull --rebase
 git add .
 git commit -m "your message"
+git push --set-upstream origin main
 git push
 ```
 
