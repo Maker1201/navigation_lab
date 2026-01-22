@@ -11,9 +11,9 @@ from isaaclab.utils import configclass  # 导入配置类装饰器，用于创�
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR  # 导入Isaac Lab资源目录路径常量
 
 import navigation_lab.tasks.manager_based.navigation_go2.mdp as mdp  # 导入导航任务的MDP（马尔可夫决策过程）模块
-from navigation_lab.tasks.manager_based.locomotion_go2.locomotion_go2_env_cfg import UnitreeGo2RoughEnvCfg  # 导入Unitree Go2机器人的底层运动环境配置
+from navigation_lab.tasks.manager_based.locomotion_go2.locomotion_go2Exteroception_env_cfg import UnitreeGo2ExteroceptionRoughEnvCfg  # 导入Unitree Go2机器人的底层运动环境配置
 
-LOW_LEVEL_ENV_CFG = UnitreeGo2RoughEnvCfg()  # 创建底层环境配置实例，用于获取底层环境的配置参数
+LOW_LEVEL_ENV_CFG = UnitreeGo2ExteroceptionRoughEnvCfg()  # 创建底层环境配置实例，用于获取底层环境的配置参数
 
 
 @configclass  # 配置类装饰器，将此类标记为配置类
