@@ -19,7 +19,7 @@ class NavigationEnvPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # 模型保存的间隔（每多少次迭代保存一次）
     save_interval = 100
     # 实验名称，用于标识和区分不同的训练实验
-    experiment_name = "unitree_go2_rough_navigation"
+    experiment_name = "navrl_navigation"
     # 策略网络（Actor-Critic）的配置
     policy = RslRlPpoActorCriticCfg(
         # 策略网络初始化的噪声标准差，用于探索

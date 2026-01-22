@@ -1,5 +1,13 @@
 # Template for Isaac Lab Projects
 
+## 更新github仓库
+```bash
+git pull --rebase
+git add .
+git commit -m "your message"
+git push
+```
+
 ## Overview
 
 This project/repository serves as a template for building projects or extensions based on Isaac Lab.

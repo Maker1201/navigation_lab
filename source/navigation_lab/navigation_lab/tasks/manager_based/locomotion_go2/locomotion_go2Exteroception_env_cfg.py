@@ -1,13 +1,8 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 import math
 from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils  # 导入isaaclab.sim模块并重命名为sim_utils：用于仿真工具
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg,RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -17,7 +12,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg,RayCasterCfg,patterns
+from isaaclab.sensors import ContactSensorCfg,RayCasterCfg,patterns,CameraCfg, TiledCameraCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR,ISAACLAB_NUCLEUS_DIR
@@ -39,32 +34,53 @@ from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG
 
 
 @configclass  # 装饰器：将类标记为配置类，用于自动生成配置对象
-class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式场景配置基类
+class NavRLSceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式场景配置基类
     """Configuration for a cart-pole scene."""  # 类的文档字符串：说明这是用于cart-pole场景的配置
 
-    # ground plane  # 注释：地面平面配置
-    terrain = TerrainImporterCfg(  # 地面资产的基础配置对象
-        prim_path="/World/ground",  # 在USD场景图中的原始路径，指定地面对象的位置
-        terrain_type="generator",  # 地形类型：使用生成器模式创建地形
-        terrain_generator=ROUGH_TERRAINS_CFG,  # 地形生成器配置：使用预定义的粗糙地形配置
-        max_init_terrain_level=5,  # 最大初始地形等级：地形生成时的最高难度级别
-        collision_group=-1,  # 碰撞组：-1表示不与任何碰撞组交互（禁用碰撞）
-        physics_material=sim_utils.RigidBodyMaterialCfg(  # 物理材质配置：定义地面的物理属性
-            friction_combine_mode="multiply",  # 摩擦系数组合模式：使用乘法模式合并摩擦系数
-            restitution_combine_mode="multiply",  # 恢复系数组合模式：使用乘法模式合并恢复系数
-            static_friction=1.0,  # 静摩擦系数：物体静止时的摩擦系数值
-            dynamic_friction=1.0,  # 动摩擦系数：物体运动时的摩擦系数值
-            restitution=1.0,  # 恢复系数（弹性系数）：碰撞后的能量恢复比例，1.0表示完全弹性碰撞
-            ),  # 物理材质配置结束
-
+    plane = TerrainImporterCfg(
+        prim_path="/World/ground/plane",
+        terrain_type="generator",
+        terrain_generator=mdp.myTerrainCfg.PLANE_TERRAIN_CFG,
+        max_init_terrain_level=5,
+        collision_group=-1,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+        ),
         visual_material=sim_utils.MdlFileCfg(  # 视觉材质配置：定义地面的外观材质
             mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",  # 材质定义文件路径：指向大理石瓷砖材质文件
             project_uvw=True,  # UVW投影：启用UVW坐标投影以正确映射纹理
             texture_scale=(0.25, 0.25),  # 纹理缩放：在U和V方向上将纹理缩放为原来的0.25倍（放大纹理）
-            ),  # 视觉材质配置结束
-        debug_vis=False,  # 调试可视化：关闭调试可视化功能
+        ),  # 视觉材质配置结束
+        # Debug visualization is useful for interactive play, but can break headless training.
+        debug_vis=False,
+    )
 
-    )  # 地面配置结束
+    
+    
+    # ground terrain
+    terrain = TerrainImporterCfg(
+        prim_path="/World/ground/forest",
+        terrain_type="generator",
+        terrain_generator=mdp.myTerrainCfg.HfFOREST_TERRAINS_CFG,
+        max_init_terrain_level=5,
+        collision_group=-1,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+        ),
+        visual_material=sim_utils.MdlFileCfg(  # 视觉材质配置：定义地面的外观材质
+            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",  # 材质定义文件路径：指向大理石瓷砖材质文件
+            project_uvw=True,  # UVW投影：启用UVW坐标投影以正确映射纹理
+            texture_scale=(0.25, 0.25),  # 纹理缩放：在U和V方向上将纹理缩放为原来的0.25倍（放大纹理）
+        ),  # 视觉材质配置结束
+        # Debug visualization is useful for interactive play, but can break headless training.
+        debug_vis=False,
+    )
 
     # robot  # 注释：机器人配置
     robot: ArticulationCfg = MISSING  # 机器人关节配置：使用MISSING标记，表示此配置必须在子类中提供
@@ -75,7 +91,7 @@ class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式�
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),  # 偏移量配置：传感器相对于基座的位置偏移（x, y, z），z=20.0表示在基座上方20米
         ray_alignment="yaw",  # 射线对齐方式：射线方向与机器人的偏航角（yaw）对齐
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),  # 扫描模式配置：网格模式，分辨率0.1米，扫描区域大小为1.6x1.0米
-        debug_vis=False,  # 调试可视化：关闭调试可视化
+        debug_vis=True,  # 调试可视化：关闭调试可视化
         mesh_prim_paths=["/World/ground"],  # 网格原始路径列表：指定要检测的地面网格路径
     )  # 高度扫描器配置结束
     height_scanner_base = RayCasterCfg(  # 基座高度扫描器配置：用于精确检测基座下方地形的扫描器
@@ -83,9 +99,22 @@ class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式�
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),  # 偏移量配置：与主高度扫描器相同的偏移位置
         ray_alignment="yaw",  # 射线对齐方式：与机器人偏航角对齐
         pattern_cfg=patterns.GridPatternCfg(resolution=0.05, size=(0.1, 0.1)),  # 扫描模式配置：更高分辨率的网格（0.05米），更小的扫描区域（0.1x0.1米）
-        debug_vis=False,  # 调试可视化：关闭调试可视化
+        debug_vis=True,  # 调试可视化：关闭调试可视化
         mesh_prim_paths=["/World/ground"],  # 网格原始路径列表：检测地面网格
     )  # 基座高度扫描器配置结束
+    # camera = TiledCameraCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base/camera",
+    #     update_period=5, # 10Hz
+    #     height=64,
+    #     width=80,
+    #     debug_vis=False,
+    #     data_types=["rgb", "distance_to_image_plane"],
+    #     spawn=sim_utils.PinholeCameraCfg(
+    #         focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 8.0)
+    #     ),
+    #     offset=CameraCfg.OffsetCfg(pos=(-0.4, 0.0, 0.1), rot=(0.5, -0.5, -0.5, 0.5), convention="ros"),
+    # )
+
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)  # 接触力传感器配置：检测机器人所有部件的接触力，历史长度为3帧，跟踪空中时间
     # lights  # 注释：灯光配置
     sky_light = AssetBaseCfg(  # 天空光资产配置：场景的环境光照配置
@@ -296,6 +325,7 @@ class EventCfg:  # 事件配置类：定义MDP中的事件规格（用于域随�
         },  # 参数配置结束
     )  # 随机化其他刚体质量事件结束
 
+
     # Skip: inertia updated via mass randomization by setting recompute_inertia=True  # 注释：跳过惯性随机化，因为通过设置recompute_inertia=True已在质量随机化时更新
     # randomize_rigid_body_inertia = EventTerm(  # 注释掉的随机化刚体惯性事件（当前未使用）
     #     func=mdp.randomize_rigid_body_inertia,  # 事件函数：使用随机化刚体惯性的函数
@@ -326,6 +356,11 @@ class EventCfg:  # 事件配置类：定义MDP中的事件规格（用于域随�
             "torque_range": (-10.0, 10.0),  # 力矩范围：外力矩的大小范围从-10.0到10.0牛米
         },  # 参数配置结束
     )  # 随机化施加外力力矩事件结束
+
+    randomize_obstacles = EventTerm(
+        func=mdp.randomize_obstacles,
+        mode="reset",
+    )
 
     randomize_reset_joints = EventTerm(  # 随机化重置关节事件：在重置时随机化关节的位置和速度
         func=mdp.reset_joints_by_scale,  # 事件函数：使用按比例重置关节的函数
@@ -688,8 +723,18 @@ class CurriculumCfg:  # 课程学习配置类：定义MDP中的课程学习规�
 class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):  # 运动速度跟踪粗糙地形环境配置类：继承自基于管理器的RL环境配置
     """Configuration for the locomotion velocity-tracking environment."""  # 类的文档字符串：说明这是运动速度跟踪环境的配置
 
+    # ===================== 障碍物参数 =====================
+    num_static_obstacles: int = 50
+    """静态障碍物数量"""
+    num_dynamic_obstacles: int = 10
+    """动态障碍物数量（可调）"""
+    obstacle_size_range: tuple[float, float] = (0.2, 0.6)
+    """障碍物尺寸范围 (m)"""
+    obstacle_spawn_range: tuple[float, float] = (-8.0, 8.0)
+    """障碍物生成范围 (x,y)"""
+
     # Scene settings  # 注释：场景设置
-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=2.5)  # 场景配置：创建场景配置实例，环境数量4096，环境间距2.5米
+    scene: NavRLSceneCfg = NavRLSceneCfg(num_envs=4096, env_spacing=2.5)  # 场景配置：创建场景配置实例，环境数量4096，环境间距2.5米
     # Basic settings  # 注释：基本设置
     observations: ObservationsCfg = ObservationsCfg()  # 观测配置：创建观测配置实例
     actions: ActionsCfg = ActionsCfg()  # 动作配置：创建动作配置实例
@@ -717,6 +762,9 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):  # 运动速度跟踪
         if self.scene.contact_forces is not None:  # 如果接触力传感器存在
             self.scene.contact_forces.update_period = self.sim.dt  # 接触力传感器更新周期：设置为物理时间步长（每个物理步骤更新）
 
+
+
+"""
         # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator  # 注释：检查是否启用了地形等级课程学习，如果启用，则启用地形生成器的课程学习
         # this generates terrains with increasing difficulty and is useful for training  # 注释：这会生成难度递增的地形，对训练很有用
         if getattr(self.curriculum, "terrain_levels", None) is not None:  # 如果课程学习配置中有地形等级项
@@ -727,20 +775,20 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):  # 运动速度跟踪
                 self.scene.terrain.terrain_generator.curriculum = False  # 禁用地形生成器的课程学习
 
     def disable_zero_weight_rewards(self):  # 禁用零权重奖励方法：将权重为0的奖励项设置为None以优化性能
-        """If the weight of rewards is 0, set rewards to None"""  # 方法的文档字符串：说明如果奖励权重为0，则将奖励设置为None
+        # If the weight of rewards is 0, set rewards to None # 方法的文档字符串：说明如果奖励权重为0，则将奖励设置为None
         for attr in dir(self.rewards):  # 遍历奖励配置的所有属性
             if not attr.startswith("__"):  # 如果不是私有属性（不以__开头）
                 reward_attr = getattr(self.rewards, attr)  # 获取奖励属性对象
                 if not callable(reward_attr) and reward_attr.weight == 0:  # 如果属性可调用且权重为0
                     setattr(self.rewards, attr, None)  # 将奖励属性设置为None
-
+"""
 
 
 
 # 使用 configclass 装饰器标记配置类，使其支持配置文件的序列化和反序列化
 @configclass
 # 定义Unitree Go2机器人在粗糙地形上的运动环境配置类，继承自LocomotionVelocityRoughEnvCfg
-class UnitreeGo2RoughEnvCfg(LocomotionVelocityRoughEnvCfg):
+class UnitreeGo2ExteroceptionRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
     # 机器人基座（base）链接的名称
     base_link_name = "base"
     # 足部链接名称的正则表达式模式，匹配所有以"_foot"结尾的链接

@@ -1,5 +1,6 @@
 from __future__ import annotations  # 启用延迟类型注解评估，允许在类型注解中使用前向引用
-
+from isaaclab.managers import EventTermCfg as EventTerm
+import random
 import torch  # 导入PyTorch库，用于张量操作和数学计算
 from typing import TYPE_CHECKING, Literal  # 导入TYPE_CHECKING和Literal，用于类型检查和字面量类型
 
@@ -163,6 +164,32 @@ def randomize_com_positions(  # 随机化质心位置函数
     # 将随机化后的质心偏移量设置到仿真中
     asset.root_physx_view.set_coms(com_offsets, env_ids)  # 将更新后的质心偏移量写入物理仿真
 
+
+
+def randomize_obstacles(env, env_ids):
+    scene = env.scene
+
+    # ========== 静态障碍物随机化 ==========
+    for i in range(env.cfg.scene.num_static_obstacles):
+        obj = scene["static_obstacles"]
+        x = random.uniform(*env.cfg.scene.obstacle_spawn_range)
+        y = random.uniform(*env.cfg.scene.obstacle_spawn_range)
+        size = random.uniform(*env.cfg.scene.obstacle_size_range)
+
+        obj.set_world_pose(
+            position=torch.tensor([x, y, size / 2], device=env.device)
+        )
+        obj.set_scale(torch.tensor([size, size, size], device=env.device))
+
+    # ========== 动态障碍物随机化 ==========
+    for i in range(env.cfg.scene.num_dynamic_obstacles):
+        obj = scene["dynamic_obstacles"]
+        x = random.uniform(*env.cfg.scene.obstacle_spawn_range)
+        y = random.uniform(*env.cfg.scene.obstacle_spawn_range)
+
+        obj.set_world_pose(
+            position=torch.tensor([x, y, 0.2], device=env.device)
+        )
 
 """
 Internal helper functions.
