@@ -7,9 +7,12 @@
 
 from isaaclab.envs.mdp import *  # noqa: F401, F403
 
-from .navrl_rewards import *  # noqa: F401, F403
-from .navrl_events import *  # noqa: F401, F403
-from .navrl_observations import *
-from .navrl_terminations import *
-
-
+from .observations import *  # noqa: F401, F403
+from .curriculums import *
+from .rewards import *  # noqa: F401, F403
+from .terminations import *  # noqa: F401, F403
+from .events import *
+# from .actions import *
+from .commands import *
+from .MyTerrain import *
+from .pre_trained_policy_action import *

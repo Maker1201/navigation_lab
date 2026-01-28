@@ -15,7 +15,7 @@ class NavigationEnvPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # 每个环境在每个迭代中收集的步数，用于经验回放缓冲区
     num_steps_per_env = 8
     # 训练的最大迭代次数，达到此值后训练停止
-    max_iterations = 4000
+    max_iterations = 2000
     # 模型保存的间隔（每多少次迭代保存一次）
     save_interval = 100
     # 实验名称，用于标识和区分不同的训练实验

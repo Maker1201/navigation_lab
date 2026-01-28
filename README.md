@@ -8,6 +8,10 @@ git commit -m "your message"
 git push --set-upstream origin main
 git push
 ```
+## Train
+```bash
+python -m torch.distributed.run --nnodes=1 --nproc_per_node=2 scripts/rsl_rl/train.py --task=Template-Velocity-Rough-Unitree-Go2-v0 --headless --distributed
+```
 
 ## Overview
 

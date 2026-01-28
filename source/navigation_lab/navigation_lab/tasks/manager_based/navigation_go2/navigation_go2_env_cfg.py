@@ -11,9 +11,75 @@ from isaaclab.utils import configclass  # 导入配置类装饰器，用于创�
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR  # 导入Isaac Lab资源目录路径常量
 
 import navigation_lab.tasks.manager_based.navigation_go2.mdp as mdp  # 导入导航任务的MDP（马尔可夫决策过程）模块
-from navigation_lab.tasks.manager_based.locomotion_go2.locomotion_go2Exteroception_env_cfg import UnitreeGo2ExteroceptionRoughEnvCfg  # 导入Unitree Go2机器人的底层运动环境配置
+from navigation_lab.tasks.manager_based.locomotion_go2.locomotion_go2_env_cfg import UnitreeGo2RoughEnvCfg  # 导入Unitree Go2机器人的底层运动环境配置
 
-LOW_LEVEL_ENV_CFG = UnitreeGo2ExteroceptionRoughEnvCfg()  # 创建底层环境配置实例，用于获取底层环境的配置参数
+LOW_LEVEL_ENV_CFG = UnitreeGo2RoughEnvCfg()  # 创建底层环境配置实例，用于获取底层环境的配置参数
+
+
+##
+# Scene definition
+##
+
+
+@configclass  # 装饰器：将类标记为配置类，用于自动生成配置对象
+class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式场景配置基类
+    """Configuration for a cart-pole scene."""  # 类的文档字符串：说明这是用于cart-pole场景的配置
+
+    # ground plane  # 注释：地面平面配置
+    terrain = TerrainImporterCfg(  # 地面资产的基础配置对象
+        prim_path="/World/ground/forest",  # 在USD场景图中的原始路径，指定地面对象的位置
+        terrain_type="generator",  # 地形类型：使用生成器模式创建地形
+        terrain_generator=mdp.FOREST_TERRAINS_CFG,  # 地形生成器配置：使用预定义的粗糙地形配置
+        max_init_terrain_level=5,  # 最大初始地形等级：地形生成时的最高难度级别
+        collision_group=-1,  # 碰撞组：-1表示不与任何碰撞组交互（禁用碰撞）
+        physics_material=sim_utils.RigidBodyMaterialCfg(  # 物理材质配置：定义地面的物理属性
+            friction_combine_mode="multiply",  # 摩擦系数组合模式：使用乘法模式合并摩擦系数
+            restitution_combine_mode="multiply",  # 恢复系数组合模式：使用乘法模式合并恢复系数
+            static_friction=1.0,  # 静摩擦系数：物体静止时的摩擦系数值
+            dynamic_friction=1.0,  # 动摩擦系数：物体运动时的摩擦系数值
+            restitution=1.0,  # 恢复系数（弹性系数）：碰撞后的能量恢复比例，1.0表示完全弹性碰撞
+            ),  # 物理材质配置结束
+
+        visual_material=sim_utils.MdlFileCfg(  # 视觉材质配置：定义地面的外观材质
+            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",  # 材质定义文件路径：指向大理石瓷砖材质文件
+            project_uvw=True,  # UVW投影：启用UVW坐标投影以正确映射纹理
+            texture_scale=(0.25, 0.25),  # 纹理缩放：在U和V方向上将纹理缩放为原来的0.25倍（放大纹理）
+            ),  # 视觉材质配置结束
+        debug_vis=False,  # 调试可视化：关闭调试可视化功能
+
+    )  # 地面配置结束
+
+    # robot  # 注释：机器人配置
+    robot: ArticulationCfg = MISSING  # 机器人关节配置：使用MISSING标记，表示此配置必须在子类中提供
+
+    # sensors  # 注释：传感器配置
+    lidar = RayCasterCfg(  # 高度扫描器配置：使用射线投射器扫描地形高度
+        prim_path="{ENV_REGEX_NS}/Robot/base",  # 传感器挂载路径：使用正则表达式匹配所有环境中的机器人基座
+        update_period=0.02,
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.3)),  # 偏移量配置：传感器相对于基座的位置偏移（x, y, z），z=20.0表示在基座上方20米
+        ray_alignment="yaw",  # 射线对齐方式：射线方向与机器人的偏航角（yaw）对齐
+        pattern_cfg=patterns.LidarPatternCfg(
+            horizontal_fov_range=[-180, 180], 
+            vertical_fov_range=(0.0,0.0), 
+            horizontal_res=1.0,
+            channels=1),
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),  # 扫描模式配置：网格模式，分辨率0.1米，扫描区域大小为1.6x1.0米
+        debug_vis=True,  # 调试可视化：关闭调试可视化
+        mesh_prim_paths=["/World/ground/forest"],  # 网格原始路径列表：指定要检测的地面网格路径
+    )  # 高度扫描器配置结束
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*", 
+        history_length=3, 
+        track_air_time=True
+    )  # 接触力传感器配置：检测机器人所有部件的接触力，历史长度为3帧，跟踪空中时间
+    # lights  # 注释：灯光配置
+    sky_light = AssetBaseCfg(  # 天空光资产配置：场景的环境光照配置
+        prim_path="/World/skyLight",  # 灯光在场景图中的路径：指定天空光对象的位置
+        spawn=sim_utils.DomeLightCfg(  # 生成配置：使用圆顶光（环境光）配置
+            intensity=750.0,  # 光照强度：设置环境光的强度值
+            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",  # 纹理文件路径：使用HDR天空纹理文件作为环境光照源
+        ),  # 圆顶光配置结束
+    )  # 天空光配置结束
 
 
 @configclass  # 配置类装饰器，将此类标记为配置类
@@ -45,7 +111,7 @@ class ActionsCfg:
 
     pre_trained_policy_action: mdp.PreTrainedPolicyActionCfg = mdp.PreTrainedPolicyActionCfg(  # 预训练策略动作配置
         asset_name="robot",  # 资产名称：机器人
-        policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt",  # 预训练策略模型文件路径
+        policy_path=f"logs/rsl_rl/unitree_go2_rough/2026-01-28_10-42-25/exported/policy.pt",  # 预训练策略模型文件路径
         low_level_decimation=4,  # 底层策略的降采样倍数（每4个高层步执行一次底层策略）
         low_level_actions=LOW_LEVEL_ENV_CFG.actions.joint_pos,  # 底层动作配置：使用底层环境的关节位置控制
         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy,  # 底层观测配置：使用底层环境的策略观测
@@ -67,6 +133,16 @@ class ObservationsCfg:
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel)  # 基座线速度观测项：获取机器人基座的线性速度
         projected_gravity = ObsTerm(func=mdp.projected_gravity)  # 投影重力观测项：获取投影到基座坐标系的重力向量
         pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})  # 姿态命令观测项：获取生成的姿态命令（pose_command）
+        lidar_sector_obs = ObsTerm( 
+            func=mdp.lidar_sector_observation,
+            params={
+                "sensor_name": "lidar",  # 对应 SceneCfg 中 lidar 的 prim_path
+                "num_sectors": 36,
+                "max_range": 10.0
+            }
+        )
+        num_sectors: int = 36
+        max_range: float = 10.0
 
     # observation groups
     # 观测组

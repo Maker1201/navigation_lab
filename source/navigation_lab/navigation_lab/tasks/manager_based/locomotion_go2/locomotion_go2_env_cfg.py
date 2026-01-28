@@ -46,7 +46,7 @@ class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式�
     terrain = TerrainImporterCfg(  # 地面资产的基础配置对象
         prim_path="/World/ground",  # 在USD场景图中的原始路径，指定地面对象的位置
         terrain_type="generator",  # 地形类型：使用生成器模式创建地形
-        terrain_generator=ROUGH_TERRAINS_CFG,  # 地形生成器配置：使用预定义的粗糙地形配置
+        terrain_generator=mdp.FOREST_TERRAINS_CFG,  # 地形生成器配置：使用预定义的粗糙地形配置
         max_init_terrain_level=5,  # 最大初始地形等级：地形生成时的最高难度级别
         collision_group=-1,  # 碰撞组：-1表示不与任何碰撞组交互（禁用碰撞）
         physics_material=sim_utils.RigidBodyMaterialCfg(  # 物理材质配置：定义地面的物理属性
@@ -72,10 +72,16 @@ class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式�
     # sensors  # 注释：传感器配置
     height_scanner = RayCasterCfg(  # 高度扫描器配置：使用射线投射器扫描地形高度
         prim_path="{ENV_REGEX_NS}/Robot/base",  # 传感器挂载路径：使用正则表达式匹配所有环境中的机器人基座
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),  # 偏移量配置：传感器相对于基座的位置偏移（x, y, z），z=20.0表示在基座上方20米
+        update_period=0.02,
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.2)),  # 偏移量配置：传感器相对于基座的位置偏移（x, y, z），z=20.0表示在基座上方20米
         ray_alignment="yaw",  # 射线对齐方式：射线方向与机器人的偏航角（yaw）对齐
+        # pattern_cfg=patterns.LidarPatternCfg(
+        #     horizontal_fov_range=[-180, 180], 
+        #     vertical_fov_range=(0.0,0.0), 
+        #     horizontal_res=1.0,
+        #     channels=1),
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),  # 扫描模式配置：网格模式，分辨率0.1米，扫描区域大小为1.6x1.0米
-        debug_vis=False,  # 调试可视化：关闭调试可视化
+        debug_vis=True,  # 调试可视化：关闭调试可视化
         mesh_prim_paths=["/World/ground"],  # 网格原始路径列表：指定要检测的地面网格路径
     )  # 高度扫描器配置结束
     height_scanner_base = RayCasterCfg(  # 基座高度扫描器配置：用于精确检测基座下方地形的扫描器
@@ -83,10 +89,14 @@ class MySceneCfg(InteractiveSceneCfg):  # 场景配置类，继承自交互式�
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),  # 偏移量配置：与主高度扫描器相同的偏移位置
         ray_alignment="yaw",  # 射线对齐方式：与机器人偏航角对齐
         pattern_cfg=patterns.GridPatternCfg(resolution=0.05, size=(0.1, 0.1)),  # 扫描模式配置：更高分辨率的网格（0.05米），更小的扫描区域（0.1x0.1米）
-        debug_vis=False,  # 调试可视化：关闭调试可视化
+        debug_vis=True,  # 调试可视化：关闭调试可视化
         mesh_prim_paths=["/World/ground"],  # 网格原始路径列表：检测地面网格
     )  # 基座高度扫描器配置结束
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)  # 接触力传感器配置：检测机器人所有部件的接触力，历史长度为3帧，跟踪空中时间
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*", 
+        history_length=3, 
+        track_air_time=True
+    )  # 接触力传感器配置：检测机器人所有部件的接触力，历史长度为3帧，跟踪空中时间
     # lights  # 注释：灯光配置
     sky_light = AssetBaseCfg(  # 天空光资产配置：场景的环境光照配置
         prim_path="/World/skyLight",  # 灯光在场景图中的路径：指定天空光对象的位置
@@ -768,7 +778,7 @@ class UnitreeGo2RoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # 减少环境数量以适应较小的GPU（7-8 GiB显存）
         # 原始值：4096个环境，为GPU内存限制减少到1024
         # 设置并行仿真的环境数量
-        self.scene.num_envs = 1024
+        self.scene.num_envs = 4096
         # 设置机器人配置，使用Unitree Go2的配置并替换原始路径为环境命名空间中的路径
         self.scene.robot = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         # 设置高度扫描器的路径，用于检测机器人基座下方的地形高度
