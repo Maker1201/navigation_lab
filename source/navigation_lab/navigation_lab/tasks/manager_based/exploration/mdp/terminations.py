@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from isaaclab.assets import RigidObject
 from isaaclab.sensors.ray_caster import RayCaster
 from isaaclab.managers import SceneEntityCfg
+from .observations import generated_commands_relative_to_base
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -94,41 +95,9 @@ def roll_over(
     is_roll_over = torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1) > threshold
     return is_roll_over
 
-
-def reach_target(
-    env: ManagerBasedRLEnv, threshold: float, command_name: str,
-    velocity_threshold: float = None,  # 速度阈值 m/s, None表示不检查速度
-    use_3d: bool = False  # 是否使用3D距离（UAV用True，UGV用False）
-) -> torch.Tensor:
-    """Terminate when the robot reaches the target within threshold distance.
+def reach_target(env: ManagerBasedRLEnv, threshold: float, command_name: str) -> torch.Tensor:
+    # 修正：调用现有的相对坐标计算函数
+    rel_pos = generated_commands_relative_to_base(env, command_name)
     
-    Args:
-        env: The environment object.
-        threshold: Position distance threshold in meters.
-        command_name: Name of the command to track.
-        velocity_threshold: Optional velocity threshold. If provided, robot must also 
-                          have velocity below this value to terminate.
-        use_3d: If True, use 3D distance (for UAV). If False, use 2D XY distance (for UGV).
-    """
-    command = env.command_manager.get_command(command_name)
-    
-    if use_3d:
-        # Use 3D distance for UAV
-        des_pos_b = command[:, :3]
-    else:
-        # Use 2D XY distance for UGV
-        des_pos_b = command[:, :2]
-    
-    distance = torch.norm(des_pos_b, dim=1)
-    position_reached = distance <= threshold
-    
-    # 如果指定了速度阈值，还需要检查速度
-    if velocity_threshold is not None:
-        asset: RigidObject = env.scene["robot"]
-        velocity = torch.norm(asset.data.root_lin_vel_w[:, :3], dim=1)
-        velocity_low = velocity <= velocity_threshold
-        # 需要同时满足：位置到达 + 速度足够低
-        return position_reached & velocity_low
-    
-    # Return True if within threshold, False otherwise
-    return position_reached
+    distance = torch.norm(rel_pos, dim=1)
+    return distance <= threshold

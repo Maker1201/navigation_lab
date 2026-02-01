@@ -7,7 +7,8 @@ import torch
 from typing import TYPE_CHECKING
 from isaaclab.envs.mdp import *  # noqa: F401, F403
 import isaaclab.utils.math as math_utils
-
+from isaaclab.assets import Articulation  # 实例对象，用于获取 .data
+from isaaclab.assets import ArticulationCfg  # 配置对象
 from isaaclab.envs import ManagerBasedRLEnv,ManagerBasedEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import Camera, Imu, RayCaster, RayCasterCamera, TiledCamera
@@ -92,18 +93,58 @@ def pose_command_position_2d(env: ManagerBasedRLEnv, command_name: str) -> torch
     return full_command[:, :2]
 
 
-def lidar_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.5) -> torch.Tensor:
-    """3D distance scan from the given sensor w.r.t. the sensor's frame.
+def generated_commands_relative_to_base(
+    env: ManagerBasedRLEnv, 
+    command_name: str, 
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """计算目标点在机器人本地坐标系下的相对位置 (x, y)。"""
+    
+    # 1. 获取机器人资产实例 (Articulation 实例包含实时的 .data 属性)
+    robot: Articulation = env.scene[asset_cfg.name]
+    
+    # 2. 获取目标点在世界坐标系下的位置 [num_envs, 2]
+    target_pose_w = env.command_manager.get_command(command_name)
+    target_pos_w = target_pose_w[:, :2] 
+    
+    # 3. 获取机器人当前的世界位置和四元数
+    current_pos_w = robot.data.root_pos_w[:, :2] 
+    current_quat_w = robot.data.root_quat_w      # [num_envs, 4]
+    
+    # 4. 计算位置差向量并扩充为 3D (x, y, 0)
+    relative_pos_w = torch.zeros((env.num_envs, 3), device=env.device)
+    relative_pos_w[:, :2] = target_pos_w - current_pos_w
+    
+    # 5. 【修正】使用 quat_apply_inverse 将向量转换到机器人本地坐标系
+    # 该函数代替了旧版的 quat_rotate_inverse
+    relative_pos_b = math_utils.quat_apply_inverse(current_quat_w, relative_pos_w)
+    
+    # 6. 返回本地坐标系下的 (x, y)
+    return relative_pos_b[:, :2]
 
-    Returns the true 3D distance (ray length) from sensor to hit points.
-    """
-    # extract the used quantities (to enable type-hinting)
+def generated_commands_polar(
+    env: ManagerBasedRLEnv, 
+    command_name: str, 
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """【强烈推荐】转换为极坐标 (距离, 角度)，导航训练收敛最快。"""
+    
+    # 获取本地坐标 (x, y)
+    rel_pos = generated_commands_relative_to_base(env, command_name, asset_cfg)
+    
+    # 计算到目标的欧式距离 [num_envs, 1]
+    dist = torch.norm(rel_pos, dim=1, keepdim=True)
+    
+    # 计算目标相对于当前朝向的偏角 (Heading Error) [num_envs, 1]
+    # atan2 返回范围 [-pi, pi]
+    angle = torch.atan2(rel_pos[:, 1], rel_pos[:, 0]).unsqueeze(1)
+    
+    # 连接为 [距离, 角度] 传给神经网络
+    return torch.cat([dist, angle], dim=1)
+
+def lidar_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     sensor: RayCaster = env.scene.sensors[sensor_cfg.name]
-    # 3D distance: full ray length from sensor to hit point
+    # 获取射线长度
     depth = torch.norm(sensor.data.ray_hits_w - sensor.data.pos_w.unsqueeze(1), dim=-1)
-
-    # optional, return the min distance and corresponding index
-    # min_value, min_index = torch.min(depth, keepdim=True, dim=-1)
-    # return torch.cat((min_value, min_index / sensor.num_rays),dim=1)
-
-    return depth
+    # 归一化到 [0, 1]，4.0 是雷达的最大量程
+    return torch.clamp(depth / 4.0, 0.0, 1.0)

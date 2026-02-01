@@ -71,25 +71,13 @@ class MySceneCfg(InteractiveSceneCfg):
     # -------------------- Robot --------------------
     robot: ArticulationCfg = MISSING
 
-    # -------------------- Goal marker --------------------
-    # goal_marker: VisualizationMarkersCfg = VisualizationMarkersCfg(
-    #     prim_path="{ENV_REGEX_NS}/Goal",
-    #     markers={
-    #         "goal": {
-    #             "type": "sphere",
-    #             "radius": 0.12,
-    #             "color": (0.1, 0.9, 0.1),
-    #         }
-    #     },
-    # )
-
     # -------------------- Raycast (LiDAR) --------------------
     lidar_scanner: RayCasterCfg = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         update_period=0.02,
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.3)),
         ray_alignment="base",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.2, size=[2.0, 2.0]),
         mesh_prim_paths=["/World/ground/forest"],
         debug_vis=True,
     )
@@ -117,12 +105,11 @@ class MySceneCfg(InteractiveSceneCfg):
     # )
 
     # -------------------- Contact forces --------------------
-    # contact_forces_cone = ContactSensorCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/base",
-    #     history_length=1,
-    #     track_air_time=False,
-    #     filter_prim_paths_expr=["{ENV_REGEX_NS}/Cone"],
-    # )
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        history_length=3,
+        track_air_time=True,
+    )
 
 # -----------------------------------------------------------------------------
 # MDP: Observations
@@ -142,8 +129,12 @@ class ObservationsCfg:
             noise=Unoise(n_min=-0.05, n_max=0.05),    
         )
 
-        pose_command = ObsTerm(func=mdp.pose_command_position_2d, params={"command_name": "pose_command"})
-        actions = ObsTerm(func=mdp.last_action)
+        # 目标相对于机器人的位置
+        pose_command_polar = ObsTerm(
+            func=mdp.generated_commands_polar, 
+            params={"command_name": "pose_command"},
+            scale=(0.5, 1.0) # 距离 2 米内缩放到 1 左右，角度本身就在 3.14 左右不需要大缩放
+        )
         lidar_scan = ObsTerm(
             func=mdp.lidar_scan,
             params={"sensor_cfg": SceneEntityCfg("lidar_scanner")},
@@ -174,6 +165,7 @@ class ActionsCfg:
     pre_trained_policy_action: mdp.PreTrainedPolicyActionCfg = mdp.PreTrainedPolicyActionCfg(
         asset_name="robot",
         policy_path="logs/rsl_rl/unitree_go2_rough/2026-01-28_10-42-25/exported/policy.pt",
+        action_scale=[1.0, 1.0, 1.2],
         low_level_decimation=4,
         low_level_actions=LOW_LEVEL_ENV_CFG.actions.joint_pos,
         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy,
@@ -189,19 +181,13 @@ class CommandsCfg:
     pose_command = mdp.TerrainBasedPose2dCommandCfg(
         asset_name="robot",
         simple_heading=False,  # 不使用简单航向模式（使用完整的方向角）
-        resampling_time_range=(180.0, 180.0),
+        resampling_time_range=(40.0, 40.0),
         debug_vis=True,
         ranges=mdp.TerrainBasedPose2dCommandCfg.Ranges(
-            heading=(1.57, 4.71)  # 只设置 heading，pos_x 和 pos_y 由地形自动采样
+            heading=(0.0, 2 * math.pi)  # 只设置 heading，pos_x 和 pos_y 由地形自动采样
         ),
     )
-    # 给出未来轨迹点
-    traj_command = mdp.TrajectoryVisCommandCfg(
-        asset_name="robot",
-        resampling_time_range=(0.1, 0.1),
-        max_length=1000,
-        threshold=10.0,  # 增大阈值，只有重置时（位置跳跃>10m）才清除轨迹
-    )
+    
 
 # -----------------------------------------------------------------------------
 # MDP: Events (reset randomization)
@@ -237,8 +223,6 @@ class EventsCfg:
     )
 
 
-
-
 # -----------------------------------------------------------------------------
 # MDP: Terminations
 # -----------------------------------------------------------------------------
@@ -256,12 +240,21 @@ class TerminationsCfg:
 
     least_lidar_depth = DoneTerm(
         func=mdp.least_lidar_depth,
-        params={"sensor_cfg": SceneEntityCfg("lidar_scanner"), "threshold": 0.12},  # 放宽碰撞阈值 30cm
+        params={
+            "sensor_cfg": SceneEntityCfg("lidar_scanner"), 
+            "threshold": 0.01
+        },  # 放宽碰撞阈值 30cm
     )
 
     roll_over = DoneTerm(
         func=mdp.roll_over,
-        params={"asset_cfg": SceneEntityCfg("robot"), "threshold": 0.2},
+        params={"asset_cfg": SceneEntityCfg("robot"), "threshold": 1.0},
+    )
+
+    # 非法接触重置（比如腹部着地立刻重置）
+    illegal_contact = DoneTerm(
+        func=mdp.illegal_contact,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
     )
 
     # 接近目标点时终止任务并重置 (只需位置到达，不再要求速度减小)
@@ -278,36 +271,37 @@ class TerminationsCfg:
 @configclass
 class RewardsCfg:
 
+
     # distance to goal
     goal_progress = RewTerm(
         func=mdp.goal_distance_progress,
-        weight=3.0,
+        weight=15.0,
         params={"command_name": "pose_command"},
     )
-
-    # heading alignment
-    heading_alignment = RewTerm(
-        func=mdp.heading_to_goal,
-        weight=1.0,
-        params={"command_name": "pose_command"},
+    
+    reach_goal_bonus = RewTerm(
+        func=mdp.reach_goal_bonus,  # 指向上面定义的函数
+        weight=50.0,                # 给予一个大额奖励 (建议 10.0 ~ 20.0)
+        params={
+            "threshold": 1.0,       # 判定到达的距离 (比如 0.5 米)
+            "command_name": "pose_command"
+        },
     )
 
-    # collision penalty
-    collision = RewTerm(
-        func=mdp.contact_force_penalty,
-        weight=-2.0,
-    )
-
-    # smooth action
+    # 3. 动作平滑（防止高层下达的速度指令闪变）
     action_smoothness = RewTerm(
         func=mdp.action_rate_l2,
-        weight=-0.05,
+        weight=-0.01,
     )
-
-    # alive bonus
-    alive = RewTerm(
-        func=mdp.is_alive,
-        weight=0.5,
+  
+    # 避障势场：越近扣分越多
+    lidar_proximity = RewTerm(
+        func=mdp.lidar_proximity_penalty, # 指向上面定义的函数
+        weight=-5.0,  # 负奖励
+        params={
+            "sensor_cfg": SceneEntityCfg("lidar_scanner"),
+            "threshold": 0.2, # 0.5米内开始紧张
+        },
     )
 
 
@@ -322,7 +316,7 @@ class CurriculumCfg:
 
     terrain_levels = CurrTerm(
         func=mdp.terrain_levels_pose,
-        params={"command_name": "pose_command", "success_threshold": 1.0},
+        params={"command_name": "pose_command", "success_threshold": 3.0},
     )
 
 
@@ -334,7 +328,7 @@ class CurriculumCfg:
 class NavRLEnvCfg(ManagerBasedRLEnvCfg):
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=256, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -349,19 +343,18 @@ class NavRLEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         """Post initialization."""
-        # viewer settings
+        # set viewer camera position
         self.viewer.eye = [0, -40, 60]
         self.viewer.lookat = [1.5, 0, -5.5]
-        
-        # general settings
-        self.decimation = 10 
-        self.episode_length_s = 180.0
+
         # simulation settings
-        self.sim.dt = 0.01  # 增大仿真时间步到0.01秒
-        self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
-        
+        self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt  # 仿真时间步长：使用底层环境的仿真时间步长
+        self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation  # 渲染间隔：使用底层环境的降采样倍数
+        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 10  # 环境降采样倍数：底层环境的10倍（高层策略执行频率更低）
+        self.episode_length_s = self.commands.pose_command.resampling_time_range[1]  # 回合长度（秒）：等于命令重新采样的时间范围上限（8.0秒）
+
         # robot configuration
         self.scene.robot = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         

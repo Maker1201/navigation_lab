@@ -17,13 +17,13 @@ if TYPE_CHECKING:  # 仅在类型检查时执行（运行时不会执行）
 
 
 class PreTrainedPolicyAction(ActionTerm):  # 预训练策略动作项类，继承自ActionTerm
-    r"""Pre-trained policy action term.
+    """Pre-trained policy action term.
 
     This action term infers a pre-trained policy and applies the corresponding low-level actions to the robot.
     The raw actions correspond to the commands for the pre-trained policy.
 
     """
-    r"""预训练策略动作项。
+    """预训练策略动作项。
 
     此动作项推理预训练策略并将相应的低层动作应用到机器人上。
     原始动作对应于预训练策略的命令。
@@ -64,9 +64,10 @@ class PreTrainedPolicyAction(ActionTerm):  # 预训练策略动作项类，继�
 
         # remap some of the low level observations to internal observations
         # 将一些低层观测重新映射到内部观测
+        action_scale = torch.tensor(cfg.action_scale, device=env.device)
         cfg.low_level_observations.actions.func = lambda dummy_env: last_action()  # 将动作观测函数设置为返回上一次动作
         cfg.low_level_observations.actions.params = dict()  # 清空动作观测的参数
-        cfg.low_level_observations.velocity_commands.func = lambda dummy_env: self._raw_actions  # 将速度命令观测函数设置为返回原始动作
+        cfg.low_level_observations.velocity_commands.func = lambda dummy_env: self._raw_actions * action_scale # 将速度命令观测函数设置为返回原始动作
         cfg.low_level_observations.velocity_commands.params = dict()  # 清空速度命令观测的参数
 
         # add the low level observations to the observation manager
@@ -234,3 +235,4 @@ class PreTrainedPolicyActionCfg(ActionTermCfg):  # 预训练策略动作项配�
     debug_vis: bool = True  # 是否可视化调试信息，默认值为True
     """Whether to visualize debug information. Defaults to False."""
     """是否可视化调试信息。默认为False。"""
+    action_scale: torch.Tensor | list[float] = [1.0, 1.0, 1.0] # 对应 x, y, yaw 的缩放
